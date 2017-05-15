@@ -4,7 +4,7 @@ lazy val gwen = ProjectRef(file("../gwen"), "gwen")
 
 val gwenWeb = project in file(".") dependsOn(gwen) 
 
-name := "gwen-web"
+name := "gwen-smart"
 
 description := "A Gwen automation engine for the web"
 
@@ -44,13 +44,15 @@ libraryDependencies += "org.seleniumhq.selenium" % "selenium-firefox-driver" % "
 
 libraryDependencies += "org.seleniumhq.selenium" % "selenium-ie-driver" % "3.4.0"
 
-libraryDependencies += "org.seleniumhq.selenium" % "selenium-safari-driver" % "3.4.0"
-
 libraryDependencies += "org.seleniumhq.selenium" % "selenium-support" % "3.4.0" excludeAll(
   ExclusionRule(organization = "junit", name="junit")
 )
 
 libraryDependencies += "commons-io" % "commons-io" % "2.5"
+
+libraryDependencies += "commons-lang" % "commons-lang" % "2.6"
+
+libraryDependencies += "org.htmlparser" % "htmlparser" % "1.6"
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.1" % "test"
 
