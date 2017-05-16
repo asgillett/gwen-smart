@@ -23,6 +23,7 @@ import org.openqa.selenium.WebElement
 import gwen.Predefs.Kestrel
 import com.typesafe.scalalogging.LazyLogging
 import scala.collection.JavaConverters._
+import com.isomorphic.webdriver.ByScLocator
 
 /**
   * Locates web elements using the selenium web driver.
@@ -71,6 +72,7 @@ trait WebElementLocator extends LazyLogging {
       case "class name" => getElement(env, By.className(lookup), elementBinding)
       case "link text" => getElement(env, By.linkText(lookup), elementBinding)
       case "partial link text" => getElement(env, By.partialLinkText(lookup), elementBinding)
+      case "scLocator" => getElement(env, ByScLocator.scLocator(lookup), elementBinding)
       case "javascript" => getElementByJavaScript(env, s"$lookup")
       case _ => throw new LocatorBindingException(elementBinding.element, s"unsupported locator: $locator")
     }) tap { optWebElement =>
@@ -163,6 +165,7 @@ trait WebElementLocator extends LazyLogging {
       case "class name" => getAllElements(env, By.className(lookup), elementBinding)
       case "link text" => getAllElements(env, By.linkText(lookup), elementBinding)
       case "partial link text" => getAllElements(env, By.partialLinkText(lookup), elementBinding)
+      case "scLocator" => getAllElements(env, ByScLocator.scLocator(lookup), elementBinding)
       case "javascript" => getAllElementsByJavaScript(env, s"$lookup")
       case _ => throw new LocatorBindingException(elementBinding.element, s"unsupported locator: $locator")
     }) tap { webElements =>
