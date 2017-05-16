@@ -35,10 +35,12 @@ import org.scalatest.mockito.MockitoSugar
 import gwen.eval.ScopedDataStack
 import gwen.eval.GwenOptions
 import org.openqa.selenium.WebDriver.{Options, TargetLocator, Timeouts}
+import com.isomorphic.webdriver.SmartClientWebDriver
+import com.isomorphic.webdriver.SmartClientFirefoxDriver
 
 class WebElementLocatorTest extends FlatSpec with Matchers with MockitoSugar with WebElementLocator {
 
-  val mockWebDriver: FirefoxDriver = mock[FirefoxDriver]
+  val mockWebDriver: SmartClientFirefoxDriver = mock[SmartClientFirefoxDriver]
   val mockWebElement: WebElement = mock[WebElement]
   val mockWebElements: List[WebElement] = List(mock[WebElement], mock[WebElement])
   val mockContainerElement: WebElement = mock[WebElement]
@@ -326,7 +328,7 @@ class WebElementLocatorTest extends FlatSpec with Matchers with MockitoSugar wit
   }
   
   private def newEnv = new WebEnvContext(GwenOptions(), new ScopedDataStack()) {
-    override def withWebDriver[T](f: WebDriver => T)(implicit takeScreenShot: Boolean = false): T = f(mockWebDriver)
+    override def withWebDriver[T](f: SmartClientWebDriver => T)(implicit takeScreenShot: Boolean = false): T = f(mockWebDriver)
   }  
   
 }

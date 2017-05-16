@@ -24,6 +24,7 @@ import org.scalatest.mockito.MockitoSugar
 import gwen.eval.ScopedDataStack
 import gwen.eval.GwenOptions
 import org.openqa.selenium.WebDriver.{Options, Timeouts}
+import com.isomorphic.webdriver.SmartClientWebDriver
 
 class WebEnvContextTest extends FlatSpec with Matchers with MockitoSugar {
   
@@ -197,7 +198,7 @@ class WebEnvContextTest extends FlatSpec with Matchers with MockitoSugar {
   def newEnv(browser: DriverManager, dry:Boolean = false): WebEnvContext = {
     
    new WebEnvContext(GwenOptions(dryRun=dry), new ScopedDataStack()) {
-     override def withWebDriver[T](f: WebDriver => T)(implicit takeScreenShot: Boolean = false): T = f(mock[WebDriver])
+     override def withWebDriver[T](f: SmartClientWebDriver => T)(implicit takeScreenShot: Boolean = false): T = f(mock[SmartClientWebDriver])
      override def close() { browser.quit() }
    }
   }

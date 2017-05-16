@@ -35,14 +35,15 @@ import gwen.UserOverrides
 import gwen.eval.EnvContext
 import gwen.eval.ScopedDataStack
 import gwen.eval.GwenOptions
+import com.isomorphic.webdriver.SmartClientWebDriver
+import com.isomorphic.webdriver.SmartClientRemoteWebDriver
 
 class DriverManagerTest extends FlatSpec with Matchers with MockitoSugar {
   
-  val mockChromeDriver: WebDriver = createMockLocalDriver
-  val mockFirefoxDriver: WebDriver = createMockLocalDriver
-  val mockIeDriver: WebDriver = createMockLocalDriver
-  val mockSafariDriver: WebDriver = createMockLocalDriver
-  val mockRemoteDriver: RemoteWebDriver = createMockRemoteDriver
+  val mockChromeDriver: SmartClientWebDriver = createMockLocalDriver
+  val mockFirefoxDriver: SmartClientWebDriver = createMockLocalDriver
+  val mockIeDriver: SmartClientWebDriver = createMockLocalDriver
+  val mockRemoteDriver: SmartClientWebDriver = createMockRemoteDriver
   
   "Firefox setting" should "load firefox driver" in {
     val manager = newManager("firefox")
@@ -57,11 +58,6 @@ class DriverManagerTest extends FlatSpec with Matchers with MockitoSugar {
   "IE setting" should "load IE driver" in {
     val manager = newManager("ie")
     manager.withWebDriver { _ should be (mockIeDriver) }
-  }
-  
-  "Safari setting" should "load safari driver" in {
-    val manager = newManager("safari")
-    manager.withWebDriver { _ should be (mockSafariDriver) }
   }
   
   "Hub URL setting" should "load remote web driver" in {
@@ -110,39 +106,38 @@ class DriverManagerTest extends FlatSpec with Matchers with MockitoSugar {
   }
   
   "Quitting new manager without referencing webdriver" should "not quit the web driver" in {
-    val mockWebDriver = mock[WebDriver]
+    val mockWebDriver = mock[SmartClientWebDriver]
     val manager = newManager(mockWebDriver)
     manager.quit()
     verify(mockWebDriver, never()).quit()
   }
   
   private def newManager(driverName: String): DriverManager = new WebEnvContext(GwenOptions(), new ScopedDataStack) with DriverManager {
-    override private[web] def chrome(): WebDriver = mockChromeDriver
-    override private[web] def firefox(): WebDriver = mockFirefoxDriver
-    override private[web] def ie(): WebDriver = mockIeDriver
-    override private[web] def safari(): WebDriver = mockSafariDriver
-    override private[web] def remote(hubUrl: String, capabilities: DesiredCapabilities): WebDriver = {
+    override private[web] def chrome(): SmartClientWebDriver = mockChromeDriver
+    override private[web] def firefox(): SmartClientWebDriver = mockFirefoxDriver
+    override private[web] def ie(): SmartClientWebDriver = mockIeDriver
+    override private[web] def remote(hubUrl: String, capabilities: DesiredCapabilities): SmartClientWebDriver = {
       val mockDriver = mockRemoteDriver
-      when(mockDriver.getCapabilities).thenReturn(capabilities)
+//      when(mockDriver.getCapabilities).thenReturn(capabilities)
       mockDriver
     }
-    override private[web] def loadWebDriver: WebDriver = withSetting("gwen.web.browser", driverName) {
+    override private[web] def loadWebDriver: SmartClientWebDriver = withSetting("gwen.web.browser", driverName) {
       super.loadWebDriver
     }
   }
   
-  private def newManager(mockDriver: WebDriver): DriverManager = new WebEnvContext(GwenOptions(), new ScopedDataStack) with DriverManager {
-    override private[web] def loadWebDriver: WebDriver = mockDriver
+  private def newManager(mockDriver: SmartClientWebDriver): DriverManager = new WebEnvContext(GwenOptions(), new ScopedDataStack) with DriverManager {
+    override private[web] def loadWebDriver: SmartClientWebDriver = mockDriver
   }
   
   private def newManager(): DriverManager = new WebEnvContext(GwenOptions(), new ScopedDataStack) with DriverManager {
-    override private[web] def loadWebDriver: WebDriver = mock[WebDriver]
+    override private[web] def loadWebDriver: SmartClientWebDriver = mock[SmartClientWebDriver]
   }
   
-  private def createMockLocalDriver: WebDriver = createMockDriver(mock[WebDriver])
-  private def createMockRemoteDriver: RemoteWebDriver = createMockDriver(mock[RemoteWebDriver])
+  private def createMockLocalDriver: SmartClientWebDriver = createMockDriver(mock[SmartClientWebDriver])
+  private def createMockRemoteDriver: SmartClientWebDriver = createMockDriver(mock[SmartClientRemoteWebDriver])
   
-  private def createMockDriver[T <: WebDriver](mockDriver: T): T = {
+  private def createMockDriver[T <: SmartClientWebDriver](mockDriver: T): T = {
     val mockOptions = mock[Options]
     val mockTimeouts = mock[Timeouts]
     val mockWindow = mock[Window]
