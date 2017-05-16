@@ -1,5 +1,6 @@
 /*
  * Copyright 2015 Brady Wood, Branko Juric
+ * Modifications by Andrew Gillett, 2017
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,18 +20,20 @@ package gwen.web
 import java.net.URL
 import java.util.concurrent.TimeUnit
 
+import com.isomorphic.webdriver.SmartClientChromeDriver
+import com.isomorphic.webdriver.SmartClientFirefoxDriver
+import com.isomorphic.webdriver.SmartClientIEDriver
+import com.isomorphic.webdriver.SmartClientWebDriver
+import com.isomorphic.webdriver.SmartClientRemoteWebDriver
 import org.openqa.selenium.OutputType
 import org.openqa.selenium.TakesScreenshot
 import org.openqa.selenium.WebDriver
-import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.chrome.ChromeOptions
-import org.openqa.selenium.firefox.{FirefoxDriver, FirefoxOptions, FirefoxProfile}
-import org.openqa.selenium.ie.InternetExplorerDriver
+import org.openqa.selenium.firefox.{FirefoxOptions, FirefoxProfile}
 import org.openqa.selenium.remote.CapabilityType
 import org.openqa.selenium.remote.DesiredCapabilities
 import org.openqa.selenium.remote.HttpCommandExecutor
 import org.openqa.selenium.remote.RemoteWebDriver
-import org.openqa.selenium.safari.SafariDriver
 import com.typesafe.scalalogging.LazyLogging
 import gwen.Predefs.Kestrel
 import org.apache.commons.io.FileUtils
@@ -46,10 +49,10 @@ trait DriverManager extends LazyLogging {
   env: WebEnvContext =>
     
   /** Map of web driver instances (keyed by name). */
-  private[web] val drivers: mutable.Map[String, WebDriver] = mutable.Map()
+  private[web] val drivers: mutable.Map[String, SmartClientWebDriver] = mutable.Map()
     
   /** Provides private access to the web driver */
-  private def webDriver: WebDriver = drivers.getOrElse(session, {
+  private def webDriver: SmartClientWebDriver = drivers.getOrElse(session, {
       loadWebDriver tap { driver =>
         drivers += (session -> driver)
         windows push driver.getWindowHandle
@@ -76,7 +79,7 @@ trait DriverManager extends LazyLogging {
     * 
     * @param driver the current web driver 
     */
-  private[web] def switchToChild(driver: WebDriver) {
+  private[web] def switchToChild(driver: SmartClientWebDriver) {
     val children = driver.getWindowHandles.asScala.filter(window => !windows.contains(window)).toList match {
       case Nil if windows.size > 1 => windows.init
       case cs => cs
@@ -150,7 +153,7 @@ trait DriverManager extends LazyLogging {
     * @param f the function to perform
     * @param takeScreenShot true to take screenshot after performing the function
     */
-  def withWebDriver[T](f: WebDriver => T)(implicit takeScreenShot: Boolean = false): T = {
+  def withWebDriver[T](f: SmartClientWebDriver => T)(implicit takeScreenShot: Boolean = false): T = {
     f(webDriver) tap { _ =>
       if (takeScreenShot) {
         captureScreenshot(false)
@@ -172,7 +175,7 @@ trait DriverManager extends LazyLogging {
   }
   
   /** Loads the selenium webdriver. */
-  private[web] def loadWebDriver: WebDriver = withGlobalSettings {
+  private[web] def loadWebDriver: SmartClientWebDriver = withGlobalSettings {
     val driverName = WebSettings.`gwen.web.browser`.toLowerCase
     logger.info(s"Starting $driverName browser session${ if(session == "primary") "" else s": $session"}")
     WebSettings.`gwen.web.remote.url` match {
@@ -181,7 +184,7 @@ trait DriverManager extends LazyLogging {
     }
   }
   
-  private def remoteDriver(driverName: String, addr: String): WebDriver = {
+  private def remoteDriver(driverName: String, addr: String): SmartClientWebDriver = {
     val capabilities = driverName match {
       case "firefox" => firefoxCapabilities()
       case "chrome" => DesiredCapabilities.chrome tap { capabilities =>
@@ -202,11 +205,10 @@ trait DriverManager extends LazyLogging {
     *  @throws gwen.web.errors.UnsupportedWebDriverException if the given
     *          web driver name is unsupported 
     */
-  private def localDriver(driverName: String): WebDriver = driverName match {
+  private def localDriver(driverName: String): SmartClientWebDriver = driverName match {
     case "firefox" => firefox()
     case "ie" => ie()
     case "chrome" => chrome()
-    case "safari" => safari()
     case _ => unsupportedWebDriverError(driverName)
   }
   
@@ -278,18 +280,16 @@ trait DriverManager extends LazyLogging {
     capabilities.setCapability(CapabilityType.ACCEPT_SSL_CERTS, true);  
   }
   
-  private[web] def chrome(): WebDriver = new ChromeDriver(chromeOptions())
+  private[web] def chrome(): SmartClientWebDriver = new SmartClientChromeDriver(chromeOptions())
   
-  private[web] def firefox(): WebDriver = new FirefoxDriver(firefoxCapabilities())
+  private[web] def firefox(): SmartClientWebDriver = new SmartClientFirefoxDriver(firefoxCapabilities())
   
-  private[web] def ie(): WebDriver = new InternetExplorerDriver(ieCapabilities())
+  private[web] def ie(): SmartClientWebDriver = new SmartClientIEDriver(ieCapabilities())
   
-  private[web] def safari(): WebDriver = new SafariDriver()
+  private[web] def remote(hubUrl: String, capabilities: DesiredCapabilities): SmartClientWebDriver =
+    new SmartClientRemoteWebDriver(new RemoteWebDriver(new HttpCommandExecutor(new URL(hubUrl)), capabilities))
   
-  private[web] def remote(hubUrl: String, capabilities: DesiredCapabilities): WebDriver =
-    new RemoteWebDriver(new HttpCommandExecutor(new URL(hubUrl)), capabilities)
-  
-  private def withGlobalSettings(driver: WebDriver): WebDriver = {
+  private def withGlobalSettings(driver: SmartClientWebDriver): SmartClientWebDriver = {
     driver.manage().timeouts().implicitlyWait(WebSettings.`gwen.web.wait.seconds`, TimeUnit.SECONDS)
     if (WebSettings.`gwen.web.maximize`) {
       driver.manage().window().maximize() 
