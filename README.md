@@ -2,21 +2,46 @@
 Gwen-web
 ========
 
-Gwen-Web is a web automation engine that runs inside the [Gwen](https://github.com/gwen-interpreter/gwen) interpreter. It allows teams to automate front end web tests by writing 
+Gwen-Smart is a fork of the Gwen-Web project specifically for web applications built with the SmartClient and Smart GWT frameworks.
+Gwen-Web is a web automation engine that runs inside the [Gwen](https://github.com/gwen-interpreter/gwen) interpreter.
+It allows teams to automate front end web tests by writing 
 [Gherkin](https://github.com/cucumber/cucumber/wiki/Gherkin) feature specifications instead of code.
 A [prescribed DSL](http://htmlpreview.github.io/?https://github.com/gwen-interpreter/gwen-web/blob/master/docs/dsl/gwen-web-dsl.html) delegates to [Selenium WebDriver](http://www.seleniumhq.org/projects/webdriver) under the covers for you and frees you from development concerns. You can also declaratively compose your own custom DSL with annotated 
 [@StepDef](https://github.com/gwen-interpreter/gwen/wiki/Meta-Features#compostable-steps) Scenarios that can accept parameters and call other steps. [Meta features](https://github.com/gwen-interpreter/gwen/wiki/Meta-Features) can help eliminate redundancies and give you the flexibility to be as imperative or as declarative as you like in your approach to writing features.
+
+SmartClient and Smart GWT are trademarks or registered trademarks of Isomorphic Software, Inc.
 
 - See also:
   - [Wiki](https://github.com/gwen-interpreter/gwen-web/wiki)
   - [FAQ](https://github.com/gwen-interpreter/gwen-web/wiki/FAQ)
   - [Blog](https://gweninterpreter.wordpress.com)
+  - [Isomorphic Software](http://www.isomorphic.com)
+
+### Why this fork?
+SmartClient is an extremely rich web framework developed by Isomorphic Software.  It greatly simplifies building desktop-like applications that run in a browser.
+
+Automated testing of a SmartClient application with standard tools such as Selenium WebDriver presents challenges because the DOM in a SmartClient application is
+not only very complex but is also likely to be different on different browsers. To address this problem, the SmartClient authors developed their own WebDriver libraries
+that are distributed with SmartClient.
+
+The SmartClient WebDriver differs from the Selenium WebDriver in a number of significant respects:
+
+* A new locator syntax (ByScLocator) is provided in addition to the standard Selenium locators (ById, ByXPath etc.).
+* Rather than using the WebDriver to locate WebElements and then manipulating those WebElements, the SmartClientWebDriver provides a rich set of methods for
+  directly manipulating the elements in the page.  Each of these methods takes a "By" object and internally locates and manipulates the WebElement without the
+  user needing to obtain a reference to that WebElement.
+* Additional operations are provided, for example "contextClick", "doubleClick", "dragAndDrop", "waitForElementClickable" and "waitForGridDone".
+* Although the SmartClientWebDriver implements the WebDriver interface, most of the methods from that interface are not included in the SmartClient documentation.
+  I have assumed that WebDriver methods that are not documented in the SmartClient API should not be used.
+
+Since the SmartClientWebDriver operates in a fundamentally different way to the standard Selenium WebDriver, it was necessary to modify the gwen-web source
+and extend the DSL.
 
 ### Current Status
 
 [![Build Status](https://travis-ci.org/gwen-interpreter/gwen-web.svg?branch=master)](https://travis-ci.org/gwen-interpreter/gwen-web)
 
-- [Latest release](https://github.com/gwen-interpreter/gwen-web/releases/latest)
+- Not ready for release.
 - [Change log](CHANGELOG)
 
 Key Features
@@ -40,7 +65,6 @@ Runtime Requirements
 - Java SE 8 Runtime Environment
 - A web browser
 - Native web driver
-  - [Safari](https://webkit.org/blog/6900/webdriver-support-in-safari-10/)
   - [Chrome](https://sites.google.com/a/chromium.org/chromedriver/)
   - [Edge](https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/)
   - [Firefox](https://github.com/mozilla/geckodriver/releases)
