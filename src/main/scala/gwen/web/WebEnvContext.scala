@@ -1,5 +1,6 @@
 /*
  * Copyright 2014-2017 Brady Wood, Branko Juric
+ * Modifications by Andrew Gillett, 2017
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +37,7 @@ import org.openqa.selenium.interactions.Actions
 import java.io.FileNotFoundException
 
 import scala.collection.mutable
+import com.isomorphic.webdriver.ByScLocator
 
 /**
   * Defines the web environment context. This includes the configured selenium web
@@ -294,11 +296,12 @@ class WebEnvContext(val options: GwenOptions, val scopes: ScopedDataStack) exten
     var result = false
     try {
       withWebElement(elementBinding) { webElement =>
+        val locator = getLocator(elementBinding)
         result = state match {
           case "displayed" => webElement.isDisplayed
           case "hidden" => !webElement.isDisplayed
-          case "checked" | "ticked" => webElement.isSelected
-          case "unchecked" | "unticked" => !webElement.isSelected
+          case "checked" | "ticked" => withWebDriver { webDriver => webDriver.getValue(locator).asInstanceOf[Boolean] }
+          case "unchecked" | "unticked" => withWebDriver { webDriver => !webDriver.getValue(locator).asInstanceOf[Boolean] }
           case "enabled" => webElement.isEnabled
           case "disabled" => !webElement.isEnabled
         }
@@ -355,28 +358,21 @@ class WebEnvContext(val options: GwenOptions, val scopes: ScopedDataStack) exten
     * 
     * @param elementBinding the web element locator binding
     */
-  private def getElementText(elementBinding: LocatorBinding): Option[String] = 
-    withWebElement(elementBinding) { webElement =>
-      (Option(webElement.getText) match {
-        case None | Some("") =>
-          Option(webElement.getAttribute("text")) match {
-            case None | Some("") =>
-              Option(webElement.getAttribute("value")) match {
-                case None | Some("") =>
-                  val value = executeScript("(function(element){return element.innerText || element.textContent || ''})(arguments[0]);", webElement).asInstanceOf[String]
-                  if (value != null) Some(value) else Some("")
-                case value => value
-              }
-            case value => value
-          }
-        case value => value
+  private def getElementText(elementBinding: LocatorBinding): Option[String] = {
+    val locator = getLocator(elementBinding)
+    withWebDriver { webDriver =>
+      val v = webDriver.getValue(locator)
+      (v match {
+        case null => Option("")
+        case _ => Option(v.toString())
       }) tap { text =>
         bindAndWait(elementBinding.element, "text", text.orNull)
       }
     } tap { value =>
       logger.debug(s"getElementText(${elementBinding.element})='$value'")
     }
-  
+  }
+
   /**
     * Gets the selected text of a dropdown web element on the current page. 
     * If a value is found, its value is bound to the current page 
@@ -528,7 +524,25 @@ class WebEnvContext(val options: GwenOptions, val scopes: ScopedDataStack) exten
       case _ => LocatorBinding(element, "cache", element, None)
     }
   }
-  
+
+  /** Finds an element by the given locator expression. */
+  private[web] def getLocator(elementBinding: LocatorBinding): By = {
+    val lookup = elementBinding.lookup
+    val locator = elementBinding.locator
+    (locator match {
+      case "id" => By.id(lookup)
+      case "name" => By.name(lookup)
+      case "tag name" => By.tagName(lookup)
+      case "css selector" => By.cssSelector(lookup)
+      case "xpath" => By.xpath(lookup)
+      case "class name" => By.className(lookup)
+      case "link text" => By.linkText(lookup)
+      case "partial link text" => By.partialLinkText(lookup)
+      case "scLocator" => ByScLocator.scLocator(lookup)
+      case _ => throw new LocatorBindingException(elementBinding.element, s"unsupported locator: $locator")
+    })
+  }
+
   /**
     * Binds the given element and value to a given action (element/action=value)
     * and then waits for any bound post conditions to be satisfied.
@@ -573,19 +587,22 @@ class WebEnvContext(val options: GwenOptions, val scopes: ScopedDataStack) exten
     */
   def sendKeys(elementBinding: LocatorBinding, value: String, clearFirst: Boolean, sendEnterKey: Boolean) {
     val element = elementBinding.element
-    withWebElement(elementBinding) { webElement =>
+    val locator = getLocator(elementBinding)
+    withWebDriver { webDriver =>
       if (clearFirst) {
-        clearText(webElement, element)
+        webDriver.`type`(locator, value)
       }
-      webElement.sendKeys(value)
+      else {
+        webDriver.sendKeys(locator, value)
+      }
       bindAndWait(element, "type", value)
       if (sendEnterKey) {
-        webElement.sendKeys(Keys.RETURN)
+        webDriver.sendKeys(locator, Keys.RETURN)
         bindAndWait(element, "enter", "true")
       }
     }
   }
-  
+
   def clearText(elementBinding: LocatorBinding) {
     withWebElement(elementBinding) { clearText(_, elementBinding.element) }
   }
@@ -644,25 +661,32 @@ class WebEnvContext(val options: GwenOptions, val scopes: ScopedDataStack) exten
       case Some(javascript) =>
         performScriptAction(action, javascript, elementBinding)
       case None =>
+        val locator = getLocator(elementBinding)
         action match {
           case "click" =>
-            withWebElement(action, elementBinding) { webElement =>
-              val clicked = executeScriptPredicate("(function(element){try{element.focus(); element.click(); return true;}catch(err){return false;}})(arguments[0]);", webElement)
-              if (!clicked) {
-                webElement.click()
-              }  
+            withWebDriver { webDriver =>
+              webDriver.waitForElementClickable(locator)
+              webDriver.click(locator)
             }
-          case _ =>
-            withWebElement(action, elementBinding) { webElement =>
-              action match {
-                case "submit" => webElement.submit()
-                case "check" | "tick" =>
-                  if (!webElement.isSelected) webElement.sendKeys(Keys.SPACE)
-                  if (!webElement.isSelected) webElement.click()
-                case "uncheck" | "untick" =>
-                  if (webElement.isSelected) webElement.sendKeys(Keys.SPACE)
-                  if (webElement.isSelected) webElement.click()
+          case "check" | "tick" =>
+            withWebDriver { webDriver =>
+              if (!webDriver.getValue(locator).asInstanceOf[Boolean]) webDriver.sendKeys(locator, Keys.SPACE)
+              if (!webDriver.getValue(locator).asInstanceOf[Boolean]) {
+                webDriver.waitForElementClickable(locator)
+                webDriver.click(locator)
               }
+            }
+          case "uncheck" | "untick" =>
+            withWebDriver { webDriver =>
+              if (webDriver.getValue(locator).asInstanceOf[Boolean]) webDriver.sendKeys(locator, Keys.SPACE)
+              if (webDriver.getValue(locator).asInstanceOf[Boolean]) {
+                webDriver.waitForElementClickable(locator)
+                webDriver.click(locator)
+              }
+            }
+          case "submit" =>
+            withWebElement(action, elementBinding) { webElement =>
+              webElement.submit()
             }
         }
     }
@@ -676,28 +700,28 @@ class WebEnvContext(val options: GwenOptions, val scopes: ScopedDataStack) exten
     }
   }
   
-  def performActionIn(action: String, elementBinding: LocatorBinding, contextBinding: LocatorBinding) {
-    def perform(webElement: WebElement, contextElement: WebElement)(buildAction: Actions => Actions) {
-      withWebDriver { driver =>
-        val moveTo = new Actions(driver).moveToElement(contextElement).moveToElement(webElement)
-        buildAction(moveTo).perform()
-      }
-    }
-    withWebElement(action, contextBinding) { contextElement =>
-      withWebElement(action, elementBinding) { webElement =>
-        action match {
-          case "click" => perform(webElement, contextElement) { _.click() }
-          case "check" | "tick" =>
-            if (!webElement.isSelected) perform(webElement, contextElement) { _.sendKeys(Keys.SPACE) }
-            if (!webElement.isSelected) perform(webElement, contextElement) { _.click() }
-          case "uncheck" | "untick" =>
-            if (webElement.isSelected) perform(webElement, contextElement) { _.sendKeys(Keys.SPACE) }
-            if (webElement.isSelected) perform(webElement, contextElement) { _.click() }
-        }
-        bindAndWait(elementBinding.element, action, "true")
-      }
-    }
-  }
+//  def performActionIn(action: String, elementBinding: LocatorBinding, contextBinding: LocatorBinding) {
+//    def perform(webElement: WebElement, contextElement: WebElement)(buildAction: Actions => Actions) {
+//      withWebDriver { driver =>
+//        val moveTo = new Actions(driver).moveToElement(contextElement).moveToElement(webElement)
+//        buildAction(moveTo).perform()
+//      }
+//    }
+//    withWebElement(action, contextBinding) { contextElement =>
+//      withWebElement(action, elementBinding) { webElement =>
+//        action match {
+//          case "click" => perform(webElement, contextElement) { _.click() }
+//          case "check" | "tick" =>
+//            if (!webElement.isSelected) perform(webElement, contextElement) { _.sendKeys(Keys.SPACE) }
+//            if (!webElement.isSelected) perform(webElement, contextElement) { _.click() }
+//          case "uncheck" | "untick" =>
+//            if (webElement.isSelected) perform(webElement, contextElement) { _.sendKeys(Keys.SPACE) }
+//            if (webElement.isSelected) perform(webElement, contextElement) { _.click() }
+//        }
+//        bindAndWait(elementBinding.element, action, "true")
+//      }
+//    }
+//  }
   
   /**
     * Waits for text to appear in the given web element.
@@ -707,6 +731,27 @@ class WebEnvContext(val options: GwenOptions, val scopes: ScopedDataStack) exten
   def waitForText(elementBinding: LocatorBinding): Boolean = 
     getElementText(elementBinding).map(_.length()).getOrElse(0) > 0
   
+  def waitForElementPresent(elementBinding : LocatorBinding): Boolean = {
+    withWebDriver { webDriver =>
+      val locator = getLocator(elementBinding)
+      webDriver.waitForElementPresent(locator)
+    }
+  }
+
+  def waitForElementNotPresent(elementBinding : LocatorBinding): Boolean = {
+    withWebDriver { webDriver =>
+      val locator = getLocator(elementBinding)
+      webDriver.waitForElementNotPresent(locator)
+    }
+  }
+
+  def waitForGrid(elementBinding : LocatorBinding): Boolean = {
+    withWebDriver { webDriver =>
+      val locator = getLocator(elementBinding)
+      webDriver.waitForGridDone(locator)
+    }
+  }
+
   /**
    * Scrolls an element into view.
    * 
