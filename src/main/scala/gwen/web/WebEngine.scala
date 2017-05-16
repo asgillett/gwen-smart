@@ -1,5 +1,6 @@
 /*
  * Copyright 2014-2017 Branko Juric, Brady Wood
+ * Modifications by Andrew Gillett, 2017
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -59,40 +60,86 @@ trait WebEngine extends EvalEngine[WebEnvContext]
   override def evaluate(step: Step, env: WebEnvContext): Unit = {
     
    step.expression match {
-    
-      case r"""I wait for (.+?)$element text for (.+?)$seconds second(?:s?)""" =>
+
+      // New for SmartClient
+      case r"""I wait for (.+?)$grid done""" =>
+        val elementBinding = env.getLocatorBinding(grid)
+        env.execute {
+          env.waitUntil(s"Waiting for $grid done") {
+            env.waitForGrid(elementBinding)
+          }
+        } getOrElse {
+          env.scopes.set(s"$grid/text", "text")
+        }
+
+      // New for SmartClient
+      case r"""I wait for (.+?)$element to be not present""" =>
         val elementBinding = env.getLocatorBinding(element)
         env.execute {
-          env.waitUntil(s"Waiting for $element text after $seconds second(s)", seconds.toInt) {
-            env.waitForText(elementBinding)
+          env.waitUntil(s"Waiting for $element to be not present") {
+            env.waitForElementNotPresent(elementBinding)
           }
         } getOrElse {
           env.scopes.set(s"$element/text", "text")
         }
 
+      // New for SmartClient
+      case r"I drag (.+?)$source to (.+?)$target" =>
+        env.execute {
+          val sourceLocator = env.getLocator(env.getLocatorBinding(source))
+          val targetLocator = env.getLocator(env.getLocatorBinding(target))
+          env.withWebDriver { driver =>
+            driver.waitForElementClickable(sourceLocator)
+            driver.waitForElementClickable(targetLocator)
+            driver.dragAndDrop(sourceLocator, targetLocator)
+          }
+        }
+    
+      // Modified for SmartClient (The SmartClient waitForText method doesn't seem to work)
+      case r"""I wait for (.+?)$element text for (.+?)$seconds second(?:s?)""" =>
+        env.execute {
+          val elementBinding = env.getLocatorBinding(element)
+          val locator = env.getLocator(elementBinding)
+          env.waitUntil(s"Waiting for $element text after $seconds second(s)", seconds.toInt) {
+            env.withWebDriver { driver =>
+              val actual = driver.getValue(locator)
+              actual != null && actual.toString.length > 0
+            }
+          }
+        } getOrElse {
+          env.scopes.set(s"$element/text", "text")
+        }
+
+      // Modified for SmartClient (The SmartClient waitForText method doesn't seem to work)
       case r"""I wait for (.+?)$element text""" =>
         val elementBinding = env.getLocatorBinding(element)
         env.execute {
-          env.waitUntil(s"Waiting for $element text") {
-            env.waitForText(elementBinding)
+            val locator = env.getLocator(elementBinding)
+          env.waitUntil(s"""Waiting for $element text""") {
+            env.withWebDriver { driver =>
+              val actual = driver.getValue(locator)
+              actual != null && actual.toString.length > 0
+            }
           }
         } getOrElse {
           env.scopes.set(s"$element/text", "text")
         }
 
+      // Modified for SmartClient
       case r"""I wait for (.+?)$element for (.+?)$seconds second(?:s?)""" =>
         val elementBinding = env.getLocatorBinding(element)
         env.execute {
           env.waitUntil(s"Waiting for $element after $seconds second(s)", seconds.toInt) {
-            env.withWebElement(elementBinding) { _=> true }
+            env.waitForElementPresent(elementBinding)
           }
         }
 
+      // Modified for SmartClient
       case r"""I wait for (.+?)$$$element""" =>
         val elementBinding = env.getLocatorBinding(element)
         env.execute {
           env.waitUntil(s"Waiting for $element") {
-            env.withWebElement(elementBinding) { _=> true }
+            env.waitForElementPresent(elementBinding)
           }
         }
 
@@ -154,6 +201,7 @@ trait WebEngine extends EvalEngine[WebEnvContext]
       case r"""I am on the (.+?)$$$page""" =>
         env.scopes.addScope(page)
         
+      // Tested with SmartClient
       case r"""I navigate to the (.+?)$$$page""" => 
         env.scopes.addScope(page)
         val url = env.getAttribute("url")
@@ -179,13 +227,15 @@ trait WebEngine extends EvalEngine[WebEnvContext]
       case r"""the url will be "(.+?)"$$$url""" => 
         env.scopes.set("url", url)   
 
-      case r"""(.+?)$element can be located by (id|name|tag name|css selector|xpath|class name|link text|partial link text|javascript)$locator "(.+?)"$expression in (.+?)$$$container""" =>
+      // Modified for SmartClient
+      case r"""(.+?)$element can be located by (id|name|tag name|css selector|xpath|class name|link text|partial link text|javascript|scLocator)$locator "(.+?)"$expression in (.+?)$$$container""" =>
         env.getLocatorBinding(container)
         env.scopes.set(s"$element/locator", locator)
         env.scopes.set(s"$element/locator/$locator", expression)
         env.scopes.set(s"$element/locator/$locator/container", container)
         
-      case r"""(.+?)$element can be located by (id|name|tag name|css selector|xpath|class name|link text|partial link text|javascript)$locator "(.+?)"$$$expression""" =>
+      // Modified for SmartClient
+      case r"""(.+?)$element can be located by (id|name|tag name|css selector|xpath|class name|link text|partial link text|javascript|scLocator)$locator "(.+?)"$$$expression""" =>
         env.scopes.set(s"$element/locator", locator)
         env.scopes.set(s"$element/locator/$locator", expression)
         env.scopes.getOpt(s"$element/locator/$locator/container") foreach { _ =>
@@ -206,12 +256,14 @@ trait WebEngine extends EvalEngine[WebEnvContext]
           env.compare("title", expected, () => env.getTitle, operator, Option(negation).isDefined)
         }
 
+      // Tested with SmartClient (displayed, hidden, checked)
       case r"""(.+?)$element should( not)?$negation be (displayed|hidden|checked|ticked|unchecked|unticked|enabled|disabled)$$$state""" =>
         val elementBinding = env.getLocatorBinding(element)
         env.execute {
           env.checkElementState(elementBinding, state, Option(negation).nonEmpty)
         }
 
+      // Tested with SmartClient
       case r"""(.+?)$element( text| value)?$selection should( not)?$negation (be|contain|start with|end with|match regex|match xpath|match json path)$operator "(.*?)"$$$expression""" =>
         if (element == "I") undefinedStepError(step)
         val actual = env.boundAttributeOrSelection(element, Option(selection))
@@ -319,20 +371,25 @@ trait WebEngine extends EvalEngine[WebEnvContext]
           env.clearText(elementBinding)
         }
 
-      case r"""I press (enter|tab)$key in (.+?)$$$element""" =>
-        val elementBinding = env.getLocatorBinding(element)
+      // Modified for SmartClient
+      case r"""I press (enter|tab|escape)$key in (.+?)$$$element""" =>
         env.execute {
-          env.withWebElement(elementBinding) { elem =>
+          val elementBinding = env.getLocatorBinding(element)
+          val locator = env.getLocator(elementBinding)
+          env.withWebDriver { webDriver =>
             key match {
               case "enter" =>
-                elem.sendKeys(Keys.RETURN)
+                webDriver.sendKeys(locator, Keys.RETURN)
+              case "escape" =>
+                webDriver.sendKeys(locator, Keys.ESCAPE)
               case _ =>
-                elem.sendKeys(Keys.TAB)
+                webDriver.sendKeys(locator, Keys.TAB)
             }
             env.bindAndWait(element, key, "true")
           }
         }
 
+      // Tested with SmartClient
       case r"""I (enter|type)$action "(.*?)"$value in (.+?)$$$element""" =>
         val elementBinding = env.getLocatorBinding(element)
         env.execute {
@@ -378,26 +435,27 @@ trait WebEngine extends EvalEngine[WebEnvContext]
           env.selectByVisibleText(elementBinding, value)
         }
 
-      case r"""I (click|check|tick|uncheck|untick)$action (.+?)$element of (.+?)$$$context""" =>
-        try {
-          val contextBinding = env.getLocatorBinding(context)
-          val elementBinding = env.getLocatorBinding(element)
-          env.execute {
-            env.performActionIn(action, elementBinding, contextBinding)
-          }
-        } catch {
-          case e1: LocatorBindingException =>
-            try {
-              val elementBinding = env.getLocatorBinding(s"$element of $context")
-              env.execute {
-                env.performAction(action, elementBinding)
-              }
-            } catch {
-              case e2: LocatorBindingException =>
-                throw new LocatorBindingException(s"'$element', '$context', or '$element of $context'", s"${e1.getMessage}, ${e2.getMessage}")
-            }
-        }
+//      case r"""I (click|check|tick|uncheck|untick)$action (.+?)$element of (.+?)$$$context""" =>
+//        try {
+//          val contextBinding = env.getLocatorBinding(context)
+//          val elementBinding = env.getLocatorBinding(element)
+//          env.execute {
+//            env.performActionIn(action, elementBinding, contextBinding)
+//          }
+//        } catch {
+//          case e1: LocatorBindingException =>
+//            try {
+//              val elementBinding = env.getLocatorBinding(s"$element of $context")
+//              env.execute {
+//                env.performAction(action, elementBinding)
+//              }
+//            } catch {
+//              case e2: LocatorBindingException =>
+//                throw new LocatorBindingException(s"'$element', '$context', or '$element of $context'", s"${e1.getMessage}, ${e2.getMessage}")
+//            }
+//        }
 
+      // Tested with SmartClient (click, check, uncheck)
       case r"""I (click|submit|check|tick|uncheck|untick)$action (.+?)$$$element""" =>
         val elementBinding = env.getLocatorBinding(element)
         env.execute {
@@ -424,6 +482,7 @@ trait WebEngine extends EvalEngine[WebEnvContext]
         env.switchToSession(session)
       }
       
+      // Tested with SmartClient
       case r"I close the(?: current)? browser" => env.execute {
         env.quit()
       }
